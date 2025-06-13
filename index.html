@@ -177,10 +177,11 @@
         import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
         import { initializeApp } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-app.js";
         import { getAuth, signInAnonymously, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-auth.js";
-        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, deleteDoc, onSnapshot, query, serverTimestamp, writeBatch, setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        import { getFirestore, doc, setDoc, getDoc, collection, addDoc, getDocs, deleteDoc, onSnapshot, query, serverTimestamp, writeBatch } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
 
-        // Firebaseのログレベルをデバッグに設定 (デバッグ用)
-        setLogLevel('debug');
+        // Firebaseのログは通常は不要なのでコメントアウト
+        // import { setLogLevel } from "https://www.gstatic.com/firebasejs/11.6.1/firebase-firestore.js";
+        // setLogLevel('debug');
 
         const firebaseConfig = {
           apiKey: "AIzaSyBk-lnmwZnhPTj3yQuMfRBc3u5HFXko95k",
@@ -315,7 +316,7 @@
         const raycaster = new THREE.Raycaster();
         const pointer = new THREE.Vector2();
         const cubeSize = 1; // キューブの一辺の長さ
-        const cubeGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize); // キューブのジオメトリ
+        const cubeGeometry = new THREE.BoxGeometry(cubeSize, cubeSize, cubeSize); // ★キューブのジオメトリ (共有)
 
         let lastTouchTime = 0; // タッチイベントのタイムスタンプ
         const DOUBLE_TAP_TIMEOUT = 300; // ダブルタップと認識する時間間隔（ミリ秒）
@@ -734,14 +735,14 @@
                 return existingCube;
             }
 
-            // 新しいキューブを作成
+            // 新しいキューブを作成 (ジオメトリは共有、マテリアルは新規作成)
             const cube = new THREE.Mesh(cubeGeometry, new THREE.MeshStandardMaterial({ color: hexColor }));
             cube.position.copy(position);
             cube.castShadow = true;
             cube.receiveShadow = true;
             cube.userData.firestoreId = docId; // FirestoreのドキュメントIDを保存
 
-            // 辺の描画
+            // 辺の描画 (ジオメトリもマテリアルも新規作成)
             const edges = new THREE.LineSegments(new THREE.EdgesGeometry(cubeGeometry), new THREE.LineBasicMaterial({ color: 0x333333 }));
             edges.visible = areEdgesVisible; // 現在の辺の表示設定を適用
             cube.add(edges); // キューブの子として辺を追加
@@ -814,23 +815,24 @@
                 unsubscribeFromCubes = null;
             }
             
-            // シーンから既存のキューブを全て削除し、配列と選択状態をクリア
-            // これにより、Firestoreからのデータで画面を完全に再構築できる
+            // 【修正箇所①】シーンから既存のキューブを全て削除し、配列と選択状態をクリア
             while(cubes.length > 0) {
                 const cube = cubes.pop();
                 scene.remove(cube);
-                // edgesが存在し、かつdisposeメソッドがある場合のみ呼び出す
-                if (cube.userData.edges && typeof cube.userData.edges.dispose === 'function') { 
-                    cube.remove(cube.userData.edges);
-                    cube.userData.edges.dispose(); // メモリ解放
+
+                // 輪郭線(edges)のジオメトリとマテリアルを解放
+                if (cube.userData.edges) {
+                    if (cube.userData.edges.geometry) {
+                        cube.userData.edges.geometry.dispose();
+                    }
+                    if (cube.userData.edges.material) {
+                        cube.userData.edges.material.dispose();
+                    }
                 }
-                // geometryとmaterialも存在し、かつdisposeメソッドがある場合のみ呼び出す
-                if (cube.geometry && typeof cube.geometry.dispose === 'function') {
-                    cube.geometry.dispose(); 
-                }
-                // materialはオブジェクトであり、色情報を持つ場合のみ考慮し、disposeメソッドがあるかをチェック
-                if (cube.material && typeof cube.material.color === 'object' && typeof cube.material.dispose === 'function') { 
-                    cube.material.dispose(); 
+
+                // キューブ自身のマテリアルを解放 (ジオメトリは共有なので解放しない)
+                if (cube.material) {
+                    cube.material.dispose();
                 }
             }
             selectedCube = null; // 選択中のキューブもクリア
@@ -858,7 +860,7 @@
                             }
                         }
                     } else if (change.type === "removed") {
-                        // 削除されたキューブを探して削除
+                        // 【修正箇所②】削除されたキューブを探して削除
                         const i = cubes.findIndex(c => c.userData.firestoreId === docId);
                         if (i > -1) { 
                             const cubeToRemove = cubes[i];
@@ -868,18 +870,19 @@
                                 selectedCube = null;
                             }
                             scene.remove(cubeToRemove); // シーンから削除
-                            // 関連するリソースを解放
-                            // edgesが存在し、かつdisposeメソッドがある場合のみ呼び出す
-                            if (cubeToRemove.userData.edges && typeof cubeToRemove.userData.edges.dispose === 'function') {
-                                cubeToRemove.remove(cubeToRemove.userData.edges);
-                                cubeToRemove.userData.edges.dispose();
+
+                            // 輪郭線(edges)のジオメトリとマテリアルを解放
+                            if (cubeToRemove.userData.edges) {
+                                if (cubeToRemove.userData.edges.geometry) {
+                                    cubeToRemove.userData.edges.geometry.dispose();
+                                }
+                                if (cubeToRemove.userData.edges.material) {
+                                    cubeToRemove.userData.edges.material.dispose();
+                                }
                             }
-                            // geometryとmaterialも存在し、かつdisposeメソッドがある場合のみ呼び出す
-                            if (cubeToRemove.geometry && typeof cubeToRemove.geometry.dispose === 'function') { 
-                                cubeToRemove.geometry.dispose(); 
-                            }
-                            if (cubeToRemove.material && typeof cubeToRemove.material.color === 'object' && typeof cubeToRemove.material.dispose === 'function') { 
-                                cubeToRemove.material.dispose(); 
+                            // キューブ自身のマテリアルを解放 (ジオメトリは共有なので解放しない)
+                            if (cubeToRemove.material) {
+                                cubeToRemove.material.dispose();
                             }
                             cubes.splice(i, 1); // 配列から削除
                         }
