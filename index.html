@@ -819,12 +819,19 @@
             while(cubes.length > 0) {
                 const cube = cubes.pop();
                 scene.remove(cube);
-                if (cube.userData.edges) { // エッジもあれば削除
+                // edgesが存在し、かつdisposeメソッドがある場合のみ呼び出す
+                if (cube.userData.edges && typeof cube.userData.edges.dispose === 'function') { 
                     cube.remove(cube.userData.edges);
                     cube.userData.edges.dispose(); // メモリ解放
                 }
-                cube.geometry.dispose(); // ジオメトリも解放
-                cube.material.dispose(); // マテリアルも解放
+                // geometryとmaterialも存在し、かつdisposeメソッドがある場合のみ呼び出す
+                if (cube.geometry && typeof cube.geometry.dispose === 'function') {
+                    cube.geometry.dispose(); 
+                }
+                // materialはオブジェクトであり、色情報を持つ場合のみ考慮し、disposeメソッドがあるかをチェック
+                if (cube.material && typeof cube.material.color === 'object' && typeof cube.material.dispose === 'function') { 
+                    cube.material.dispose(); 
+                }
             }
             selectedCube = null; // 選択中のキューブもクリア
 
@@ -862,12 +869,18 @@
                             }
                             scene.remove(cubeToRemove); // シーンから削除
                             // 関連するリソースを解放
-                            if (cubeToRemove.userData.edges) {
+                            // edgesが存在し、かつdisposeメソッドがある場合のみ呼び出す
+                            if (cubeToRemove.userData.edges && typeof cubeToRemove.userData.edges.dispose === 'function') {
                                 cubeToRemove.remove(cubeToRemove.userData.edges);
                                 cubeToRemove.userData.edges.dispose();
                             }
-                            cubeToRemove.geometry.dispose(); 
-                            cubeToRemove.material.dispose(); 
+                            // geometryとmaterialも存在し、かつdisposeメソッドがある場合のみ呼び出す
+                            if (cubeToRemove.geometry && typeof cubeToRemove.geometry.dispose === 'function') { 
+                                cubeToRemove.geometry.dispose(); 
+                            }
+                            if (cubeToRemove.material && typeof cubeToRemove.material.color === 'object' && typeof cubeToRemove.material.dispose === 'function') { 
+                                cubeToRemove.material.dispose(); 
+                            }
                             cubes.splice(i, 1); // 配列から削除
                         }
                     }
